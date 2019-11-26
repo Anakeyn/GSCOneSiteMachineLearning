@@ -5,9 +5,10 @@ Created on Wed Jun 19 18:39:18 2019
 @author: Pierre
 """
 ##########################################################################
-# GSCOneSiteMachineLearning
+# GSCOneSiteMachineLearning - modifié le 26/11/2019 
 # Auteur : Pierre Rouarch - Licence GPL 3
 # Test modele machine learning pour un site (données Google Search Console API)
+#  focus sur la précision du set de test plutot que le F1 Score global
 ###################################################################
 # On démarre ici 
 ###################################################################
@@ -31,7 +32,7 @@ from sklearn.preprocessing import StandardScaler
 #Matrice de confusion
 from sklearn.metrics import confusion_matrix
 #pour les scores
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score  #abandonné
 #from sklearn.metrics import matthews_corrcoef
 from sklearn.metrics import accuracy_score
 import gc #pour vider la memoire
@@ -43,6 +44,8 @@ print(os.getcwd())  #verif
 #myPath = "C:/Users/Pierre/MyPath"
 #os.chdir(myPath) #modification du path
 #print(os.getcwd()) #verif
+
+
 
 
 #Relecture des données Pages/Expressions/Positions ############
@@ -201,8 +204,10 @@ scaler.fit(X)
 
 X_Scaled = pd.DataFrame(scaler.transform(X.values), columns=X.columns, index=X.index)
 X_Scaled.info()
-
-X_train, X_test, y_train, y_test = train_test_split(X_Scaled,y, random_state=0)
+#onchoisit random_state = 42 en hommage à La grande question sur la vie, l'univers et le reste
+#dans "Le Guide du voyageur galactique"   par  Douglas Adams. Ceci afin d'avoir le même split
+#tout au long de notre étude.
+X_train, X_test, y_train, y_test = train_test_split(X_Scaled,y, random_state=42)
 
 
 
@@ -210,10 +215,10 @@ X_train, X_test, y_train, y_test = train_test_split(X_Scaled,y, random_state=0)
 
 #############################################################################
 #Méthode des k-NN
-nMax=10
+nMax=20
 myTrainScore =  np.zeros(shape=nMax)
 myTestScore = np.zeros(shape=nMax)
-myF1Score = np.zeros(shape=nMax)  #score F1
+#myF1Score = np.zeros(shape=nMax)  #score F1 abandonné
 
 
 for n in range(1,nMax) :
@@ -223,22 +228,16 @@ for n in range(1,nMax) :
     print("Training set score: {:.3f}".format(knn.score(X_train,y_train))) #
     myTestScore[n]=knn.score(X_test,y_test)
     print("Test set score: {:.4f}".format(knn.score(X_test,y_test))) #
-    y_pred=knn.predict(X_Scaled)
-    print("F1-Score  : {:.4f}".format(f1_score(y, y_pred, average ='weighted')))
-    myF1Score[n] = f1_score(y, y_pred, average ='weighted')
-    myCM = confusion_matrix(y, y_pred)
-    print("Accuracy calculated with CM : {:.4f}".format((myCM[0][0] +  myCM[1][1] ) / y.size))
-    print("Accuracy by sklearn : {:.4f}".format(accuracy_score(y, y_pred)))  #idem que précédent
 
 
-#Graphique train score vs test score vs F1 Score
+
+#Graphique train score vs test score 
 sns.set()  #paramètres esthétiques ressemble à ggplot par défaut.
 fig, ax = plt.subplots()  #un seul plot
 sns.lineplot(x=np.arange(1,nMax), y=myTrainScore[1:nMax])
 sns.lineplot(x=np.arange(1,nMax), y=myTestScore[1:nMax], color='red')
-sns.lineplot(x=np.arange(1,nMax), y=myF1Score[1:nMax], color='yellow')
 fig.suptitle('On obtient déjà des résultats satisfaisants avec peu de variables.', fontsize=14, fontweight='bold')
-ax.set(xlabel='n neighbors', ylabel='Train (bleu) / Test (rouge) / F1 (jaune)',
+ax.set(xlabel='n neighbors', ylabel='Train (bleu) / Test (rouge)',
        title="Attention il s'agit ici d'une étude sur un seul site")
 fig.text(.3,-.06,"Classification Knn - un seul site - Position  dans 2 groupes  \n vs variables construites en fonction des n voisins", 
          fontsize=9)
@@ -246,9 +245,9 @@ fig.text(.3,-.06,"Classification Knn - un seul site - Position  dans 2 groupes  
 fig.savefig("GSC1-KNN-Classifier-2groups.png", bbox_inches="tight", dpi=600)
 
 
-#on choist le le premier n_neighbor ou myF1Score est le plus grand
+#On choisit le le premier n_neighbor ou myTestScore est le plus grand
 #à vérifier toutefois en regardant la courbe.
-indices = np.where(myF1Score == np.amax(myF1Score))
+indices = np.where(myTestScore == np.amax(myTestScore))
 n_neighbor =  indices[0][0]
 n_neighbor
 knn = KNeighborsClassifier(n_neighbors=n_neighbor) 
@@ -256,9 +255,10 @@ knn.fit(X_train, y_train)
 print("N neighbor="+str(n_neighbor))
 print("Training set score: {:.3f}".format(knn.score(X_train,y_train))) #
 print("Test set score: {:.4f}".format(knn.score(X_test,y_test))) #
-y_pred=knn.predict(X_Scaled)
-print("F1-Score  : {:.4f}".format(f1_score(y, y_pred, average ='weighted')))
-#f1Score retenu pour knn 0.8944
+#myTestScore   retenu pour knn pour 7 voisins   0.8837 
+
+
+
 
 #par curiosité regardons la distribution des pages dans les groupes 
 sns.set()  #paramètres esthétiques ressemble à ggplot par défaut.
@@ -280,33 +280,27 @@ fig.savefig("GSC1-Distribution-2groups.png", bbox_inches="tight", dpi=600)
 logreg = LogisticRegression(solver='lbfgs').fit(X_train,y_train)
 print("Training set score: {:.3f}".format(logreg.score(X_train,y_train)))  
 print("Test set score: {:.3f}".format(logreg.score(X_test,y_test))) 
-y_pred=logreg.predict(X_Scaled)
-print("F1-Score  : {:.4f}".format(f1_score(y, y_pred, average ='weighted')))
-#pas mieux que knn 0.7714
+#0.876  pas mieux que knn (knn : 0.8837 )
 
 logreg100 = LogisticRegression(C=100, solver='lbfgs').fit(X_train,y_train)
 print("Training set score: {:.3f}".format(logreg100.score(X_train,y_train)))  
 print("Test set score: {:.3f}".format(logreg100.score(X_test,y_test)))  
-y_pred=logreg100.predict(X_Scaled)
-print("F1-Score  : {:.4f}".format(f1_score(y, y_pred, average ='weighted')))
-# 0.7744 pas mieux que knn mais mieux que  logreg standard
+# 0.884  légèrement mieux que knn (knn : 0.8837 )  <- !!!!!!!!!!!!!
+
+
 logreg001 = LogisticRegression(C=0.01, solver='lbfgs').fit(X_train,y_train)
 print("Training set score: {:.3f}".format(logreg001.score(X_train,y_train)))  
-print("Test set score: {:.3f}".format(logreg001.score(X_test,y_test))) 
-y_pred=logreg001.predict(X_Scaled)
-print("F1-Score  : {:.4f}".format(f1_score(y, y_pred, average ='weighted'))) 
-# 0.7567 pas mieux que knn ni logreg standard 
+print("Test set score: {:.3f}".format(logreg001.score(X_test,y_test)))  
+# 0.868  moin bien que logreg standard (0,876)  et  knn (knn : 0.8837 )
 
 #################################################################################
 #Classification linéaire 2 :  machine à vecteurs supports linéaire (linear SVC).
 LinSVC = LinearSVC(max_iter=10000).fit(X_train,y_train)
 print("Training set score: {:.3f}".format(LinSVC.score(X_train,y_train)))  
 print("Test set score: {:.3f}".format(LinSVC.score(X_test,y_test))) 
-y_pred=LinSVC.predict(X_Scaled)
-print("F1-Score  : {:.4f}".format(f1_score(y, y_pred, average ='weighted'))) 
-#0.7714 pas mieux que KNN egal à loreg standard
+# 0.876 pas mieux que KNN egal à loreg standard
 
-
+#-> on selectionne logreg100
 
 #######################################################################
 # Affichage de l'importance des variables pour logreg100
